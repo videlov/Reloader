@@ -50,25 +50,25 @@ func (r ResourceDeleteHandler) GetConfig() (util.Config, string) {
 	return config, oldSHAData
 }
 
-func invokeDeleteStrategy(upgradeFuncs callbacks.RollingUpgradeFuncs, item runtime.Object, config util.Config, autoReload bool) (constants.Result, []byte) {
+func invokeDeleteStrategy(upgradeFuncs callbacks.RollingUpgradeFuncs, item runtime.Object, config util.Config, autoReload bool) InvokeStrategyResult {
 	if options.ReloadStrategy == constants.AnnotationsReloadStrategy {
 		return removePodAnnotations(upgradeFuncs, item, config, autoReload)
 	}
 
-	return removeContainerEnvVars(upgradeFuncs, item, config, autoReload), nil
+	return removeContainerEnvVars(upgradeFuncs, item, config, autoReload)
 }
 
-func removePodAnnotations(upgradeFuncs callbacks.RollingUpgradeFuncs, item runtime.Object, config util.Config, autoReload bool) (constants.Result, []byte) {
+func removePodAnnotations(upgradeFuncs callbacks.RollingUpgradeFuncs, item runtime.Object, config util.Config, autoReload bool) InvokeStrategyResult {
 	config.SHAValue = testutil.GetSHAfromEmptyData()
 	return updatePodAnnotations(upgradeFuncs, item, config, autoReload)
 }
 
-func removeContainerEnvVars(upgradeFuncs callbacks.RollingUpgradeFuncs, item runtime.Object, config util.Config, autoReload bool) constants.Result {
+func removeContainerEnvVars(upgradeFuncs callbacks.RollingUpgradeFuncs, item runtime.Object, config util.Config, autoReload bool) InvokeStrategyResult {
 	envVar := getEnvVarName(config.ResourceName, config.Type)
 	container := getContainerUsingResource(upgradeFuncs, item, config, autoReload)
 
 	if container == nil {
-		return constants.NoContainerFound
+		return InvokeStrategyResult{constants.NoContainerFound, nil}
 	}
 
 	//remove if env var exists
@@ -84,9 +84,9 @@ func removeContainerEnvVars(upgradeFuncs callbacks.RollingUpgradeFuncs, item run
 		}
 		if index != -1 {
 			containers[i].Env = append(containers[i].Env[:index], containers[i].Env[index+1:]...)
-			return constants.Updated
+			return InvokeStrategyResult{constants.Updated, nil}
 		}
 	}
 
-	return constants.NotUpdated
+	return InvokeStrategyResult{constants.NotUpdated, nil}
 }

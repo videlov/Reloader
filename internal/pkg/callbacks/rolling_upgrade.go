@@ -36,7 +36,7 @@ type VolumesFunc func(runtime.Object) []v1.Volume
 // UpdateFunc performs the resource update
 type UpdateFunc func(kube.Clients, string, runtime.Object) error
 
-// PatchFunc performs the resource update
+// PatchFunc performs the resource patch
 type PatchFunc func(kube.Clients, string, runtime.Object, []byte) error
 
 // AnnotationsFunc is a generic func to return annotations
@@ -57,6 +57,7 @@ type RollingUpgradeFuncs struct {
 	PatchFunc              PatchFunc
 	VolumesFunc            VolumesFunc
 	ResourceType           string
+	SupportsPatch          bool
 }
 
 // GetDeploymentItems returns the deployments in given namespace
