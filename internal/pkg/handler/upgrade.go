@@ -37,9 +37,10 @@ func GetDeploymentRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 		InitContainersFunc: callbacks.GetDeploymentInitContainers,
 		UpdateFunc:         callbacks.UpdateDeployment,
 		PatchFunc:          callbacks.PatchDeployment,
+		PatchTemplateFunc:  callbacks.GetDeploymentPatchTemplate,
 		VolumesFunc:        callbacks.GetDeploymentVolumes,
 		ResourceType:       "Deployment",
-		SupportsPatch:      false,
+		SupportsPatch:      true,
 	}
 }
 
@@ -52,6 +53,8 @@ func GetCronJobCreateJobFuncs() callbacks.RollingUpgradeFuncs {
 		ContainersFunc:     callbacks.GetCronJobContainers,
 		InitContainersFunc: callbacks.GetCronJobInitContainers,
 		UpdateFunc:         callbacks.CreateJobFromCronjob,
+		PatchFunc:          callbacks.PatchCronJob,
+		PatchTemplateFunc:  callbacks.GetCronJobPatchTemplate,
 		VolumesFunc:        callbacks.GetCronJobVolumes,
 		ResourceType:       "CronJob",
 		SupportsPatch:      false,
@@ -67,6 +70,8 @@ func GetJobCreateJobFuncs() callbacks.RollingUpgradeFuncs {
 		ContainersFunc:     callbacks.GetJobContainers,
 		InitContainersFunc: callbacks.GetJobInitContainers,
 		UpdateFunc:         callbacks.ReCreateJobFromjob,
+		PatchFunc:          callbacks.PatchJob,
+		PatchTemplateFunc:  callbacks.GetJobPatchTemplate,
 		VolumesFunc:        callbacks.GetJobVolumes,
 		ResourceType:       "Job",
 		SupportsPatch:      false,
@@ -82,9 +87,11 @@ func GetDaemonSetRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 		ContainersFunc:     callbacks.GetDaemonSetContainers,
 		InitContainersFunc: callbacks.GetDaemonSetInitContainers,
 		UpdateFunc:         callbacks.UpdateDaemonSet,
+		PatchFunc:          callbacks.PatchDaemonSet,
+		PatchTemplateFunc:  callbacks.GetDaemonSetPatchTemplate,
 		VolumesFunc:        callbacks.GetDaemonSetVolumes,
 		ResourceType:       "DaemonSet",
-		SupportsPatch:      false,
+		SupportsPatch:      true,
 	}
 }
 
@@ -97,9 +104,11 @@ func GetStatefulSetRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 		ContainersFunc:     callbacks.GetStatefulSetContainers,
 		InitContainersFunc: callbacks.GetStatefulSetInitContainers,
 		UpdateFunc:         callbacks.UpdateStatefulSet,
+		PatchFunc:          callbacks.PatchStatefulSet,
+		PatchTemplateFunc:  callbacks.GetStatefulSetPatchTemplate,
 		VolumesFunc:        callbacks.GetStatefulSetVolumes,
 		ResourceType:       "StatefulSet",
-		SupportsPatch:      false,
+		SupportsPatch:      true,
 	}
 }
 
@@ -112,9 +121,11 @@ func GetDeploymentConfigRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 		ContainersFunc:     callbacks.GetDeploymentConfigContainers,
 		InitContainersFunc: callbacks.GetDeploymentConfigInitContainers,
 		UpdateFunc:         callbacks.UpdateDeploymentConfig,
+		PatchFunc:          callbacks.PatchDeploymentConfig,
+		PatchTemplateFunc:  callbacks.GetDeploymentConfigPatchTemplate,
 		VolumesFunc:        callbacks.GetDeploymentConfigVolumes,
 		ResourceType:       "DeploymentConfig",
-		SupportsPatch:      false,
+		SupportsPatch:      true,
 	}
 }
 
@@ -127,6 +138,8 @@ func GetArgoRolloutRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 		ContainersFunc:     callbacks.GetRolloutContainers,
 		InitContainersFunc: callbacks.GetRolloutInitContainers,
 		UpdateFunc:         callbacks.UpdateRollout,
+		PatchFunc:          callbacks.PatchRollout,
+		PatchTemplateFunc:  callbacks.GetRolloutPatchTemplate,
 		VolumesFunc:        callbacks.GetRolloutVolumes,
 		ResourceType:       "Rollout",
 		SupportsPatch:      false,
@@ -287,7 +300,7 @@ func PerformAction(clients kube.Clients, config util.Config, upgradeFuncs callba
 				return err
 			}
 			resourceName := accessor.GetName()
-			if upgradeFuncs.SupportsPatch {
+			if upgradeFuncs.SupportsPatch && strategyResult.Patch != nil {
 				err = upgradeFuncs.PatchFunc(clients, config.Namespace, i, strategyResult.Patch)
 			} else {
 				err = upgradeFuncs.UpdateFunc(clients, config.Namespace, i)
@@ -475,7 +488,7 @@ func updatePodAnnotations(upgradeFuncs callbacks.RollingUpgradeFuncs, item runti
 	// Generate reloaded annotations. Attaching this to the item's annotation will trigger a rollout
 	// Note: the data on this struct is purely informational and is not used for future updates
 	reloadSource := util.NewReloadSourceFromConfig(config, []string{container.Name})
-	annotations, patch, err := createReloadedAnnotations(&reloadSource)
+	annotations, patch, err := createReloadedAnnotations(&reloadSource, upgradeFuncs)
 	if err != nil {
 		logrus.Errorf("Failed to create reloaded annotations for %s! error = %v", config.ResourceName, err)
 		return InvokeStrategyResult{constants.NotUpdated, nil}
@@ -501,7 +514,7 @@ func getReloaderAnnotationKey() string {
 	)
 }
 
-func createReloadedAnnotations(target *util.ReloadSource) (map[string]string, []byte, error) {
+func createReloadedAnnotations(target *util.ReloadSource, upgradeFuncs callbacks.RollingUpgradeFuncs) (map[string]string, []byte, error) {
 	if target == nil {
 		return nil, nil, errors.New("target is required")
 	}
@@ -519,7 +532,7 @@ func createReloadedAnnotations(target *util.ReloadSource) (map[string]string, []
 	}
 
 	annotations[lastReloadedResourceName] = string(lastReloadedResource)
-	patch := fmt.Sprintf(`{"metadata": {"annotations": {"%s": "%s"}}}`, lastReloadedResourceName, annotations[lastReloadedResourceName])
+	patch := fmt.Sprintf(upgradeFuncs.PatchTemplateFunc(), lastReloadedResourceName, jsonEscape(annotations[lastReloadedResourceName]))
 	return annotations, []byte(patch), nil
 }
 
@@ -564,4 +577,13 @@ func updateEnvVar(container *v1.Container, envVar string, shaData string) consta
 	}
 
 	return constants.NoEnvVarFound
+}
+
+func jsonEscape(i string) string {
+	b, err := json.Marshal(i)
+	if err != nil {
+		panic(err)
+	}
+	s := string(b)
+	return s[1 : len(s)-1]
 }
