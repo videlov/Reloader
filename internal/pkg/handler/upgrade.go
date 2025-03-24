@@ -325,10 +325,8 @@ func upgradeResource(clients kube.Clients, config util.Config, upgradeFuncs call
 			strategyResult = strategy(upgradeFuncs, resource, config, true)
 		}
 	}
-
 	if strategyResult.Result == constants.Updated {
 		var err error
-
 		if upgradeFuncs.SupportsPatch && strategyResult.Patch != nil {
 			err = upgradeFuncs.PatchFunc(clients, config.Namespace, resource, strategyResult.Patch)
 		} else {
@@ -505,7 +503,6 @@ func invokeReloadStrategy(upgradeFuncs callbacks.RollingUpgradeFuncs, item runti
 	if options.ReloadStrategy == constants.AnnotationsReloadStrategy {
 		return updatePodAnnotations(upgradeFuncs, item, config, autoReload)
 	}
-
 	return updateContainerEnvVars(upgradeFuncs, item, config, autoReload)
 }
 
