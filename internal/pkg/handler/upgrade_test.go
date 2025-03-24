@@ -2488,6 +2488,9 @@ func TestFailedRollingUpgradeUsingArs(t *testing.T) {
 	deploymentFuncs.UpdateFunc = func(_ kube.Clients, _ string, _ runtime.Object) error {
 		return fmt.Errorf("error")
 	}
+	deploymentFuncs.PatchFunc = func(kube.Clients, string, runtime.Object, []byte) error {
+		return fmt.Errorf("error")
+	}
 	collectors := getCollectors()
 
 	_ = PerformAction(clients, config, deploymentFuncs, collectors, nil, invokeReloadStrategy)
@@ -3534,6 +3537,9 @@ func TestFailedRollingUpgradeUsingErs(t *testing.T) {
 	config := getConfigWithAnnotations(envVarPostfix, ersConfigmapName, shaData, options.ConfigmapUpdateOnChangeAnnotation, options.ConfigmapReloaderAutoAnnotation)
 	deploymentFuncs := GetDeploymentRollingUpgradeFuncs()
 	deploymentFuncs.UpdateFunc = func(_ kube.Clients, _ string, _ runtime.Object) error {
+		return fmt.Errorf("error")
+	}
+	deploymentFuncs.PatchFunc = func(kube.Clients, string, runtime.Object, []byte) error {
 		return fmt.Errorf("error")
 	}
 	collectors := getCollectors()
