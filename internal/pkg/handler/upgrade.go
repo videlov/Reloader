@@ -25,11 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 )
 
 // GetDeploymentRollingUpgradeFuncs returns all callback funcs for a deployment
 func GetDeploymentRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
+		ItemFunc:           callbacks.GetDeploymentItem,
 		ItemsFunc:          callbacks.GetDeploymentItems,
 		AnnotationsFunc:    callbacks.GetDeploymentAnnotations,
 		PodAnnotationsFunc: callbacks.GetDeploymentPodAnnotations,
@@ -47,6 +49,7 @@ func GetDeploymentRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 // GetDeploymentRollingUpgradeFuncs returns all callback funcs for a cronjob
 func GetCronJobCreateJobFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
+		ItemFunc:           callbacks.GetCronJobItem,
 		ItemsFunc:          callbacks.GetCronJobItems,
 		AnnotationsFunc:    callbacks.GetCronJobAnnotations,
 		PodAnnotationsFunc: callbacks.GetCronJobPodAnnotations,
@@ -64,6 +67,7 @@ func GetCronJobCreateJobFuncs() callbacks.RollingUpgradeFuncs {
 // GetDeploymentRollingUpgradeFuncs returns all callback funcs for a cronjob
 func GetJobCreateJobFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
+		ItemFunc:           callbacks.GetJobItem,
 		ItemsFunc:          callbacks.GetJobItems,
 		AnnotationsFunc:    callbacks.GetJobAnnotations,
 		PodAnnotationsFunc: callbacks.GetJobPodAnnotations,
@@ -81,6 +85,7 @@ func GetJobCreateJobFuncs() callbacks.RollingUpgradeFuncs {
 // GetDaemonSetRollingUpgradeFuncs returns all callback funcs for a daemonset
 func GetDaemonSetRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
+		ItemFunc:           callbacks.GetDaemonSetItem,
 		ItemsFunc:          callbacks.GetDaemonSetItems,
 		AnnotationsFunc:    callbacks.GetDaemonSetAnnotations,
 		PodAnnotationsFunc: callbacks.GetDaemonSetPodAnnotations,
@@ -98,6 +103,7 @@ func GetDaemonSetRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 // GetStatefulSetRollingUpgradeFuncs returns all callback funcs for a statefulSet
 func GetStatefulSetRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
+		ItemFunc:           callbacks.GetStatefulSetItem,
 		ItemsFunc:          callbacks.GetStatefulSetItems,
 		AnnotationsFunc:    callbacks.GetStatefulSetAnnotations,
 		PodAnnotationsFunc: callbacks.GetStatefulSetPodAnnotations,
@@ -115,6 +121,7 @@ func GetStatefulSetRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 // GetDeploymentConfigRollingUpgradeFuncs returns all callback funcs for a deploymentConfig
 func GetDeploymentConfigRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
+		ItemFunc:           callbacks.GetDeploymentConfigItem,
 		ItemsFunc:          callbacks.GetDeploymentConfigItems,
 		AnnotationsFunc:    callbacks.GetDeploymentConfigAnnotations,
 		PodAnnotationsFunc: callbacks.GetDeploymentConfigPodAnnotations,
@@ -132,6 +139,7 @@ func GetDeploymentConfigRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 // GetArgoRolloutRollingUpgradeFuncs returns all callback funcs for a rollout
 func GetArgoRolloutRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
+		ItemFunc:           callbacks.GetRolloutItem,
 		ItemsFunc:          callbacks.GetRolloutItems,
 		AnnotationsFunc:    callbacks.GetRolloutAnnotations,
 		PodAnnotationsFunc: callbacks.GetRolloutPodAnnotations,
@@ -231,111 +239,133 @@ func rollingUpgrade(clients kube.Clients, config util.Config, upgradeFuncs callb
 func PerformAction(clients kube.Clients, config util.Config, upgradeFuncs callbacks.RollingUpgradeFuncs, collectors metrics.Collectors, recorder record.EventRecorder, strategy invokeStrategy) error {
 	items := upgradeFuncs.ItemsFunc(clients, config.Namespace)
 
-	for _, i := range items {
-		// find correct annotation and update the resource
-		annotations := upgradeFuncs.AnnotationsFunc(i)
-		annotationValue, found := annotations[config.Annotation]
-		searchAnnotationValue, foundSearchAnn := annotations[options.AutoSearchAnnotation]
-		reloaderEnabledValue, foundAuto := annotations[options.ReloaderAutoAnnotation]
-		typedAutoAnnotationEnabledValue, foundTypedAuto := annotations[config.TypedAutoAnnotation]
-		excludeConfigmapAnnotationValue, foundExcludeConfigmap := annotations[options.ConfigmapExcludeReloaderAnnotation]
-		excludeSecretAnnotationValue, foundExcludeSecret := annotations[options.SecretExcludeReloaderAnnotation]
+	for _, item := range items {
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			return upgradeResource(clients, config, upgradeFuncs, collectors, recorder, strategy, item)
+		})
 
-		if !found && !foundAuto && !foundTypedAuto && !foundSearchAnn {
-			annotations = upgradeFuncs.PodAnnotationsFunc(i)
-			annotationValue = annotations[config.Annotation]
-			searchAnnotationValue = annotations[options.AutoSearchAnnotation]
-			reloaderEnabledValue = annotations[options.ReloaderAutoAnnotation]
-			typedAutoAnnotationEnabledValue = annotations[config.TypedAutoAnnotation]
+		if err != nil {
+			return err
 		}
+	}
 
-		isResourceExcluded := false
+	return nil
+}
 
-		switch config.Type {
-		case constants.ConfigmapEnvVarPostfix:
-			if foundExcludeConfigmap {
-				isResourceExcluded = checkIfResourceIsExcluded(config.ResourceName, excludeConfigmapAnnotationValue)
-			}
-		case constants.SecretEnvVarPostfix:
-			if foundExcludeSecret {
-				isResourceExcluded = checkIfResourceIsExcluded(config.ResourceName, excludeSecretAnnotationValue)
-			}
+func upgradeResource(clients kube.Clients, config util.Config, upgradeFuncs callbacks.RollingUpgradeFuncs, collectors metrics.Collectors, recorder record.EventRecorder, strategy invokeStrategy, resource runtime.Object) error {
+	accessor, err := meta.Accessor(resource)
+	if err != nil {
+		return err
+	}
+
+	resourceName := accessor.GetName()
+	resource, err = upgradeFuncs.ItemFunc(clients, resourceName, config.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// find correct annotation and update the resource
+	annotations := upgradeFuncs.AnnotationsFunc(resource)
+	annotationValue, found := annotations[config.Annotation]
+	searchAnnotationValue, foundSearchAnn := annotations[options.AutoSearchAnnotation]
+	reloaderEnabledValue, foundAuto := annotations[options.ReloaderAutoAnnotation]
+	typedAutoAnnotationEnabledValue, foundTypedAuto := annotations[config.TypedAutoAnnotation]
+	excludeConfigmapAnnotationValue, foundExcludeConfigmap := annotations[options.ConfigmapExcludeReloaderAnnotation]
+	excludeSecretAnnotationValue, foundExcludeSecret := annotations[options.SecretExcludeReloaderAnnotation]
+
+	if !found && !foundAuto && !foundTypedAuto && !foundSearchAnn {
+		annotations = upgradeFuncs.PodAnnotationsFunc(resource)
+		annotationValue = annotations[config.Annotation]
+		searchAnnotationValue = annotations[options.AutoSearchAnnotation]
+		reloaderEnabledValue = annotations[options.ReloaderAutoAnnotation]
+		typedAutoAnnotationEnabledValue = annotations[config.TypedAutoAnnotation]
+	}
+
+	isResourceExcluded := false
+
+	switch config.Type {
+	case constants.ConfigmapEnvVarPostfix:
+		if foundExcludeConfigmap {
+			isResourceExcluded = checkIfResourceIsExcluded(config.ResourceName, excludeConfigmapAnnotationValue)
 		}
-
-		if isResourceExcluded {
-			continue
+	case constants.SecretEnvVarPostfix:
+		if foundExcludeSecret {
+			isResourceExcluded = checkIfResourceIsExcluded(config.ResourceName, excludeSecretAnnotationValue)
 		}
+	}
 
-		strategyResult := InvokeStrategyResult{constants.NotUpdated, nil}
-		reloaderEnabled, _ := strconv.ParseBool(reloaderEnabledValue)
-		typedAutoAnnotationEnabled, _ := strconv.ParseBool(typedAutoAnnotationEnabledValue)
-		if reloaderEnabled || typedAutoAnnotationEnabled || reloaderEnabledValue == "" && typedAutoAnnotationEnabledValue == "" && options.AutoReloadAll {
-			strategyResult = strategy(upgradeFuncs, i, config, true)
-		}
+	if isResourceExcluded {
+		return nil
+	}
 
-		if strategyResult.Result != constants.Updated && annotationValue != "" {
-			values := strings.Split(annotationValue, ",")
-			for _, value := range values {
-				value = strings.TrimSpace(value)
-				re := regexp.MustCompile("^" + value + "$")
-				if re.Match([]byte(config.ResourceName)) {
-					strategyResult = strategy(upgradeFuncs, i, config, false)
-					if strategyResult.Result == constants.Updated {
-						break
-					}
-				}
-			}
-		}
+	strategyResult := InvokeStrategyResult{constants.NotUpdated, nil}
+	reloaderEnabled, _ := strconv.ParseBool(reloaderEnabledValue)
+	typedAutoAnnotationEnabled, _ := strconv.ParseBool(typedAutoAnnotationEnabledValue)
+	if reloaderEnabled || typedAutoAnnotationEnabled || reloaderEnabledValue == "" && typedAutoAnnotationEnabledValue == "" && options.AutoReloadAll {
+		strategyResult = strategy(upgradeFuncs, resource, config, true)
+	}
 
-		if strategyResult.Result != constants.Updated && searchAnnotationValue == "true" {
-			matchAnnotationValue := config.ResourceAnnotations[options.SearchMatchAnnotation]
-			if matchAnnotationValue == "true" {
-				strategyResult = strategy(upgradeFuncs, i, config, true)
-			}
-		}
-
-		if strategyResult.Result == constants.Updated {
-			accessor, err := meta.Accessor(i)
-			if err != nil {
-				return err
-			}
-			resourceName := accessor.GetName()
-			if upgradeFuncs.SupportsPatch && strategyResult.Patch != nil {
-				err = upgradeFuncs.PatchFunc(clients, config.Namespace, i, strategyResult.Patch)
-			} else {
-				err = upgradeFuncs.UpdateFunc(clients, config.Namespace, i)
-			}
-			if err != nil {
-				message := fmt.Sprintf("Update for '%s' of type '%s' in namespace '%s' failed with error %v", resourceName, upgradeFuncs.ResourceType, config.Namespace, err)
-				logrus.Errorf("Update for '%s' of type '%s' in namespace '%s' failed with error %v", resourceName, upgradeFuncs.ResourceType, config.Namespace, err)
-
-				collectors.Reloaded.With(prometheus.Labels{"success": "false"}).Inc()
-				collectors.ReloadedByNamespace.With(prometheus.Labels{"success": "false", "namespace": config.Namespace}).Inc()
-				if recorder != nil {
-					recorder.Event(i, v1.EventTypeWarning, "ReloadFail", message)
-				}
-				return err
-			} else {
-				message := fmt.Sprintf("Changes detected in '%s' of type '%s' in namespace '%s'", config.ResourceName, config.Type, config.Namespace)
-				message += fmt.Sprintf(", Updated '%s' of type '%s' in namespace '%s'", resourceName, upgradeFuncs.ResourceType, config.Namespace)
-
-				logrus.Infof("Changes detected in '%s' of type '%s' in namespace '%s'; updated '%s' of type '%s' in namespace '%s'", config.ResourceName, config.Type, config.Namespace, resourceName, upgradeFuncs.ResourceType, config.Namespace)
-
-				collectors.Reloaded.With(prometheus.Labels{"success": "true"}).Inc()
-				collectors.ReloadedByNamespace.With(prometheus.Labels{"success": "true", "namespace": config.Namespace}).Inc()
-				alert_on_reload, ok := os.LookupEnv("ALERT_ON_RELOAD")
-				if recorder != nil {
-					recorder.Event(i, v1.EventTypeNormal, "Reloaded", message)
-				}
-				if ok && alert_on_reload == "true" {
-					msg := fmt.Sprintf(
-						"Reloader detected changes in *%s* of type *%s* in namespace *%s*. Hence reloaded *%s* of type *%s* in namespace *%s*",
-						config.ResourceName, config.Type, config.Namespace, resourceName, upgradeFuncs.ResourceType, config.Namespace)
-					alert.SendWebhookAlert(msg)
+	if strategyResult.Result != constants.Updated && annotationValue != "" {
+		values := strings.Split(annotationValue, ",")
+		for _, value := range values {
+			value = strings.TrimSpace(value)
+			re := regexp.MustCompile("^" + value + "$")
+			if re.Match([]byte(config.ResourceName)) {
+				strategyResult = strategy(upgradeFuncs, resource, config, false)
+				if strategyResult.Result == constants.Updated {
+					break
 				}
 			}
 		}
 	}
+
+	if strategyResult.Result != constants.Updated && searchAnnotationValue == "true" {
+		matchAnnotationValue := config.ResourceAnnotations[options.SearchMatchAnnotation]
+		if matchAnnotationValue == "true" {
+			strategyResult = strategy(upgradeFuncs, resource, config, true)
+		}
+	}
+
+	if strategyResult.Result == constants.Updated {
+		var err error
+
+		if upgradeFuncs.SupportsPatch && strategyResult.Patch != nil {
+			err = upgradeFuncs.PatchFunc(clients, config.Namespace, resource, strategyResult.Patch)
+		} else {
+			err = upgradeFuncs.UpdateFunc(clients, config.Namespace, resource)
+		}
+
+		if err != nil {
+			message := fmt.Sprintf("Update for '%s' of type '%s' in namespace '%s' failed with error %v", resourceName, upgradeFuncs.ResourceType, config.Namespace, err)
+			logrus.Errorf("Update for '%s' of type '%s' in namespace '%s' failed with error %v", resourceName, upgradeFuncs.ResourceType, config.Namespace, err)
+
+			collectors.Reloaded.With(prometheus.Labels{"success": "false"}).Inc()
+			collectors.ReloadedByNamespace.With(prometheus.Labels{"success": "false", "namespace": config.Namespace}).Inc()
+			if recorder != nil {
+				recorder.Event(resource, v1.EventTypeWarning, "ReloadFail", message)
+			}
+			return err
+		} else {
+			message := fmt.Sprintf("Changes detected in '%s' of type '%s' in namespace '%s'", config.ResourceName, config.Type, config.Namespace)
+			message += fmt.Sprintf(", Updated '%s' of type '%s' in namespace '%s'", resourceName, upgradeFuncs.ResourceType, config.Namespace)
+
+			logrus.Infof("Changes detected in '%s' of type '%s' in namespace '%s'; updated '%s' of type '%s' in namespace '%s'", config.ResourceName, config.Type, config.Namespace, resourceName, upgradeFuncs.ResourceType, config.Namespace)
+
+			collectors.Reloaded.With(prometheus.Labels{"success": "true"}).Inc()
+			collectors.ReloadedByNamespace.With(prometheus.Labels{"success": "true", "namespace": config.Namespace}).Inc()
+			alert_on_reload, ok := os.LookupEnv("ALERT_ON_RELOAD")
+			if recorder != nil {
+				recorder.Event(resource, v1.EventTypeNormal, "Reloaded", message)
+			}
+			if ok && alert_on_reload == "true" {
+				msg := fmt.Sprintf(
+					"Reloader detected changes in *%s* of type *%s* in namespace *%s*. Hence reloaded *%s* of type *%s* in namespace *%s*",
+					config.ResourceName, config.Type, config.Namespace, resourceName, upgradeFuncs.ResourceType, config.Namespace)
+				alert.SendWebhookAlert(msg)
+			}
+		}
+	}
+
 	return nil
 }
 
