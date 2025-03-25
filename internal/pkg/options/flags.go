@@ -45,7 +45,7 @@ var (
 	// IsArgoRollouts Adds support for argo rollouts
 	IsArgoRollouts = "false"
 	// ReloadStrategy Specify the update strategy
-	ReloadStrategy = constants.AnnotationsReloadStrategy
+	ReloadStrategy = constants.EnvVarsReloadStrategy
 	// ReloadOnCreate Adds support to watch create events
 	ReloadOnCreate = "false"
 	// ReloadOnDelete Adds support to watch delete events
