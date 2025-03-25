@@ -15,7 +15,6 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	patchtypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 
 	argorolloutv1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	openshiftv1 "github.com/openshift/api/apps/v1"
@@ -484,19 +483,15 @@ func EmptyString() string {
 // UpdateDeployment performs rolling upgrade on deployment
 func UpdateDeployment(clients kube.Clients, namespace string, resource runtime.Object) error {
 	deployment := resource.(*appsv1.Deployment)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.KubernetesClient.AppsV1().Deployments(namespace).Update(context.TODO(), deployment, meta_v1.UpdateOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.KubernetesClient.AppsV1().Deployments(namespace).Update(context.TODO(), deployment, meta_v1.UpdateOptions{FieldManager: "Reloader"})
+	return err
 }
 
 // PatchDeployment performs rolling upgrade on deployment
 func PatchDeployment(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
 	deployment := resource.(*appsv1.Deployment)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.KubernetesClient.AppsV1().Deployments(namespace).Patch(context.TODO(), deployment.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.KubernetesClient.AppsV1().Deployments(namespace).Patch(context.TODO(), deployment.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
+	return err
 }
 
 // CreateJobFromCronjob performs rolling upgrade on cronjob
@@ -507,10 +502,8 @@ func CreateJobFromCronjob(clients kube.Clients, namespace string, resource runti
 		Spec:       cronJob.Spec.JobTemplate.Spec,
 	}
 	job.GenerateName = cronJob.Name + "-"
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.KubernetesClient.BatchV1().Jobs(namespace).Create(context.TODO(), job, meta_v1.CreateOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.KubernetesClient.BatchV1().Jobs(namespace).Create(context.TODO(), job, meta_v1.CreateOptions{FieldManager: "Reloader"})
+	return err
 }
 
 func PatchCronJob(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
@@ -545,10 +538,8 @@ func ReCreateJobFromjob(clients kube.Clients, namespace string, resource runtime
 	job.Spec.Selector = nil
 
 	// Create the new job with same spec
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = clients.KubernetesClient.BatchV1().Jobs(namespace).Create(context.TODO(), job, meta_v1.CreateOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err = clients.KubernetesClient.BatchV1().Jobs(namespace).Create(context.TODO(), job, meta_v1.CreateOptions{FieldManager: "Reloader"})
+	return err
 }
 
 func PatchJob(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
@@ -558,68 +549,54 @@ func PatchJob(clients kube.Clients, namespace string, resource runtime.Object, p
 // UpdateDaemonSet performs rolling upgrade on daemonSet
 func UpdateDaemonSet(clients kube.Clients, namespace string, resource runtime.Object) error {
 	daemonSet := resource.(*appsv1.DaemonSet)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.KubernetesClient.AppsV1().DaemonSets(namespace).Update(context.TODO(), daemonSet, meta_v1.UpdateOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.KubernetesClient.AppsV1().DaemonSets(namespace).Update(context.TODO(), daemonSet, meta_v1.UpdateOptions{FieldManager: "Reloader"})
+	return err
 }
 
 func PatchDaemonSet(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
 	daemonSet := resource.(*appsv1.DaemonSet)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.KubernetesClient.AppsV1().DaemonSets(namespace).Patch(context.TODO(), daemonSet.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.KubernetesClient.AppsV1().DaemonSets(namespace).Patch(context.TODO(), daemonSet.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
+	return err
 }
 
 // UpdateStatefulSet performs rolling upgrade on statefulSet
 func UpdateStatefulSet(clients kube.Clients, namespace string, resource runtime.Object) error {
 	statefulSet := resource.(*appsv1.StatefulSet)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.KubernetesClient.AppsV1().StatefulSets(namespace).Update(context.TODO(), statefulSet, meta_v1.UpdateOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.KubernetesClient.AppsV1().StatefulSets(namespace).Update(context.TODO(), statefulSet, meta_v1.UpdateOptions{FieldManager: "Reloader"})
+	return err
 }
 
 func PatchStatefulSet(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
 	statefulSet := resource.(*appsv1.StatefulSet)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.KubernetesClient.AppsV1().StatefulSets(namespace).Patch(context.TODO(), statefulSet.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.KubernetesClient.AppsV1().StatefulSets(namespace).Patch(context.TODO(), statefulSet.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
+	return err
 }
 
 // UpdateDeploymentConfig performs rolling upgrade on deploymentConfig
 func UpdateDeploymentConfig(clients kube.Clients, namespace string, resource runtime.Object) error {
 	deploymentConfig := resource.(*openshiftv1.DeploymentConfig)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.OpenshiftAppsClient.AppsV1().DeploymentConfigs(namespace).Update(context.TODO(), deploymentConfig, meta_v1.UpdateOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.OpenshiftAppsClient.AppsV1().DeploymentConfigs(namespace).Update(context.TODO(), deploymentConfig, meta_v1.UpdateOptions{FieldManager: "Reloader"})
+	return err
 }
 
 func PatchDeploymentConfig(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
 	deploymentConfig := resource.(*openshiftv1.DeploymentConfig)
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := clients.OpenshiftAppsClient.AppsV1().DeploymentConfigs(namespace).Patch(context.TODO(), deploymentConfig.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
-		return err
-	})
+	_, err := clients.OpenshiftAppsClient.AppsV1().DeploymentConfigs(namespace).Patch(context.TODO(), deploymentConfig.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
+	return err
 }
 
 // UpdateRollout performs rolling upgrade on rollout
 func UpdateRollout(clients kube.Clients, namespace string, resource runtime.Object) error {
 	rollout := resource.(*argorolloutv1alpha1.Rollout)
 	strategy := rollout.GetAnnotations()[options.RolloutStrategyAnnotation]
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var err error
-		switch options.ToArgoRolloutStrategy(strategy) {
-		case options.RestartStrategy:
-			_, err = clients.ArgoRolloutClient.ArgoprojV1alpha1().Rollouts(namespace).Patch(context.TODO(), rollout.Name, patchtypes.MergePatchType, []byte(fmt.Sprintf(`{"spec": {"restartAt": "%s"}}`, time.Now().Format(time.RFC3339))), meta_v1.PatchOptions{FieldManager: "Reloader"})
-		case options.RolloutStrategy:
-			_, err = clients.ArgoRolloutClient.ArgoprojV1alpha1().Rollouts(namespace).Update(context.TODO(), rollout, meta_v1.UpdateOptions{FieldManager: "Reloader"})
-		}
-		return err
-	})
+	var err error
+	switch options.ToArgoRolloutStrategy(strategy) {
+	case options.RestartStrategy:
+		_, err = clients.ArgoRolloutClient.ArgoprojV1alpha1().Rollouts(namespace).Patch(context.TODO(), rollout.Name, patchtypes.MergePatchType, []byte(fmt.Sprintf(`{"spec": {"restartAt": "%s"}}`, time.Now().Format(time.RFC3339))), meta_v1.PatchOptions{FieldManager: "Reloader"})
+	case options.RolloutStrategy:
+		_, err = clients.ArgoRolloutClient.ArgoprojV1alpha1().Rollouts(namespace).Update(context.TODO(), rollout, meta_v1.UpdateOptions{FieldManager: "Reloader"})
+	}
+	return err
 }
 
 func PatchRollout(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
