@@ -3,7 +3,6 @@ package callbacks_test
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -161,14 +161,16 @@ func TestResourceItem(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.createFunc(clients, fixtures.namespace, "1")
+			resource, err := tt.createFunc(clients, fixtures.namespace, "1")
 			assert.NoError(t, err)
 
-			resourceName := "test-" + strings.ToLower(tt.name)
-			_, err = tt.getItemFunc(clients, resourceName, fixtures.namespace)
+			accessor, err := meta.Accessor(resource)
 			assert.NoError(t, err)
 
-			tt.deleteFunc(clients, fixtures.namespace, resourceName)
+			_, err = tt.getItemFunc(clients, accessor.GetName(), fixtures.namespace)
+			assert.NoError(t, err)
+
+			tt.deleteFunc(clients, fixtures.namespace, accessor.GetName())
 		})
 	}
 }
@@ -345,7 +347,10 @@ func TestUpdateResources(t *testing.T) {
 			err = tt.updateFunc(clients, fixtures.namespace, resource)
 			assert.NoError(t, err)
 
-			tt.deleteFunc(clients, fixtures.namespace, "test-"+strings.ToLower(tt.name))
+			accessor, err := meta.Accessor(resource)
+			assert.NoError(t, err)
+
+			tt.deleteFunc(clients, fixtures.namespace, accessor.GetName())
 		})
 	}
 }
@@ -394,7 +399,10 @@ func TestPatchResources(t *testing.T) {
 			err = tt.patchFunc(clients, fixtures.namespace, resource, []byte(`{"metadata":{"annotations":{"test":"test"}}}`))
 			tt.assertFunc(err)
 
-			tt.deleteFunc(clients, fixtures.namespace, "test-"+strings.ToLower(tt.name))
+			accessor, err := meta.Accessor(resource)
+			assert.NoError(t, err)
+
+			tt.deleteFunc(clients, fixtures.namespace, accessor.GetName())
 		})
 	}
 }
