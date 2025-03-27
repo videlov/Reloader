@@ -116,8 +116,6 @@ func TestRunLeaderElection(t *testing.T) {
 // with real controllers and that on context cancellation the controllers stop
 // running.
 func TestRunLeaderElectionWithControllers(t *testing.T) {
-	options.ReloadStrategy = constants.EnvVarsReloadStrategy
-
 	t.Logf("Creating controller")
 	var controllers []*controller.Controller
 	for k := range kube.ResourceMap {

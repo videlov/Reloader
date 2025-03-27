@@ -565,13 +565,13 @@ func createReloadedAnnotations(target *util.ReloadSource, upgradeFuncs callbacks
 	}
 
 	annotations[lastReloadedResourceName] = string(lastReloadedResource)
-	escapedValue, err := jsonEscape(annotations[lastReloadedResourceName])
-	if err != nil {
-		return nil, nil, err
-	}
 
 	var patch []byte
 	if upgradeFuncs.SupportsPatch {
+		escapedValue, err := jsonEscape(annotations[lastReloadedResourceName])
+		if err != nil {
+			return nil, nil, err
+		}
 		patch = fmt.Appendf(nil, upgradeFuncs.PatchTemplatesFunc().AnnotationTemplate, lastReloadedResourceName, escapedValue)
 	}
 
