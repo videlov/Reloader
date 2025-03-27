@@ -3,6 +3,7 @@ package callbacks_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 
 	argorolloutv1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	fakeargoclientset "github.com/argoproj/argo-rollouts/pkg/client/clientset/versioned/fake"
+	patchtypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/stakater/Reloader/internal/pkg/callbacks"
 	"github.com/stakater/Reloader/internal/pkg/options"
@@ -114,7 +116,7 @@ func TestUpdateRollout(t *testing.T) {
 func TestPatchRollout(t *testing.T) {
 	namespace := "test-ns"
 	rollout := testutil.GetRollout(namespace, "test", map[string]string{options.RolloutStrategyAnnotation: ""})
-	err := callbacks.PatchRollout(clients, namespace, rollout, []byte(`{"spec": {}}`))
+	err := callbacks.PatchRollout(clients, namespace, rollout, patchtypes.StrategicMergePatchType, []byte(`{"spec": {}}`))
 	assert.EqualError(t, err, "not supported patching: Rollout")
 }
 
@@ -361,7 +363,7 @@ func TestPatchResources(t *testing.T) {
 	tests := []struct {
 		name       string
 		createFunc func(kube.Clients, string, string) (runtime.Object, error)
-		patchFunc  func(kube.Clients, string, runtime.Object, []byte) error
+		patchFunc  func(kube.Clients, string, runtime.Object, patchtypes.PatchType, []byte) error
 		deleteFunc func(kube.Clients, string, string) error
 		assertFunc func(err error)
 	}{
@@ -396,7 +398,7 @@ func TestPatchResources(t *testing.T) {
 			resource, err := tt.createFunc(clients, fixtures.namespace, "1")
 			assert.NoError(t, err)
 
-			err = tt.patchFunc(clients, fixtures.namespace, resource, []byte(`{"metadata":{"annotations":{"test":"test"}}}`))
+			err = tt.patchFunc(clients, fixtures.namespace, resource, patchtypes.StrategicMergePatchType, []byte(`{"metadata":{"annotations":{"test":"test"}}}`))
 			tt.assertFunc(err)
 
 			accessor, err := meta.Accessor(resource)
@@ -451,6 +453,24 @@ func TestGetVolumes(t *testing.T) {
 			assert.Equal(t, fixtures.defaultVolumes, tt.getFunc(tt.resource))
 		})
 	}
+}
+
+func TesGetPatchTemplateAnnotation(t *testing.T) {
+	templates := callbacks.GetPatchTemplates()
+	assert.NotEmpty(t, templates.AnnotationTemplate)
+	assert.Equal(t, 2, strings.Count(templates.AnnotationTemplate, "%s"))
+}
+
+func TestGetPatchTemplateEnvVar(t *testing.T) {
+	templates := callbacks.GetPatchTemplates()
+	assert.NotEmpty(t, templates.EnvVarTemplate)
+	assert.Equal(t, 3, strings.Count(templates.EnvVarTemplate, "%s"))
+}
+
+func TestGetPatchDeleteTemplateEnvVar(t *testing.T) {
+	templates := callbacks.GetPatchTemplates()
+	assert.NotEmpty(t, templates.DeleteEnvVarTemplate)
+	assert.Equal(t, 2, strings.Count(templates.DeleteEnvVarTemplate, "%d"))
 }
 
 // Helper functions

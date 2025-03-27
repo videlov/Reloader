@@ -39,10 +39,10 @@ type VolumesFunc func(runtime.Object) []v1.Volume
 type UpdateFunc func(kube.Clients, string, runtime.Object) error
 
 // PatchFunc performs the resource patch
-type PatchFunc func(kube.Clients, string, runtime.Object, []byte) error
+type PatchFunc func(kube.Clients, string, runtime.Object, patchtypes.PatchType, []byte) error
 
 // PatchTemplateFunc is a generic func to return strategic merge JSON patch template
-type PatchTemplateFunc func() string
+type PatchTemplatesFunc func() PatchTemplates
 
 // AnnotationsFunc is a generic func to return annotations
 type AnnotationsFunc func(runtime.Object) map[string]string
@@ -52,20 +52,26 @@ type PodAnnotationsFunc func(runtime.Object) map[string]string
 
 // RollingUpgradeFuncs contains generic functions to perform rolling upgrade
 type RollingUpgradeFuncs struct {
-	ItemFunc                    ItemFunc
-	ItemsFunc                   ItemsFunc
-	AnnotationsFunc             AnnotationsFunc
-	PodAnnotationsFunc          PodAnnotationsFunc
-	ContainersFunc              ContainersFunc
-	ContainerPatchPathFunc      ContainersFunc
-	InitContainersFunc          InitContainersFunc
-	UpdateFunc                  UpdateFunc
-	PatchFunc                   PatchFunc
-	PatchTemplateAnnotationFunc PatchTemplateFunc
-	PatchTemplateEnvVarFunc     PatchTemplateFunc
-	VolumesFunc                 VolumesFunc
-	ResourceType                string
-	SupportsPatch               bool
+	ItemFunc               ItemFunc
+	ItemsFunc              ItemsFunc
+	AnnotationsFunc        AnnotationsFunc
+	PodAnnotationsFunc     PodAnnotationsFunc
+	ContainersFunc         ContainersFunc
+	ContainerPatchPathFunc ContainersFunc
+	InitContainersFunc     InitContainersFunc
+	UpdateFunc             UpdateFunc
+	PatchFunc              PatchFunc
+	PatchTemplatesFunc     PatchTemplatesFunc
+	VolumesFunc            VolumesFunc
+	ResourceType           string
+	SupportsPatch          bool
+}
+
+// PatchTemplates contains merge JSON patch templates
+type PatchTemplates struct {
+	AnnotationTemplate   string
+	EnvVarTemplate       string
+	DeleteEnvVarTemplate string
 }
 
 // GetDeploymentItem returns the deployment in given namespace
@@ -468,16 +474,13 @@ func GetRolloutInitContainers(item runtime.Object) []v1.Container {
 	return item.(*argorolloutv1alpha1.Rollout).Spec.Template.Spec.InitContainers
 }
 
-func GetPatchTemplateAnnotation() string {
-	return `{"spec":{"template":{"metadata":{"annotations":{"%s":"%s"}}}}}`
-}
-
-func GetPatchTemplateEnvVar() string {
-	return `{"spec":{"template":{"spec":{"containers":[{"name":"%s","env":[{"name":"%s","value":"%s"}]}]}}}}`
-}
-
-func EmptyString() string {
-	return ""
+// GetPatchTemplates returns patch templates
+func GetPatchTemplates() PatchTemplates {
+	return PatchTemplates{
+		AnnotationTemplate:   `{"spec":{"template":{"metadata":{"annotations":{"%s":"%s"}}}}}`,                                   // strategic merge patch
+		EnvVarTemplate:       `{"spec":{"template":{"spec":{"containers":[{"name":"%s","env":[{"name":"%s","value":"%s"}]}]}}}}`, // strategic merge patch
+		DeleteEnvVarTemplate: `[{"op":"remove","path":"/spec/template/spec/containers/%d/env/%d"}]`,                              // JSON patch
+	}
 }
 
 // UpdateDeployment performs rolling upgrade on deployment
@@ -488,9 +491,9 @@ func UpdateDeployment(clients kube.Clients, namespace string, resource runtime.O
 }
 
 // PatchDeployment performs rolling upgrade on deployment
-func PatchDeployment(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
+func PatchDeployment(clients kube.Clients, namespace string, resource runtime.Object, patchType patchtypes.PatchType, bytes []byte) error {
 	deployment := resource.(*appsv1.Deployment)
-	_, err := clients.KubernetesClient.AppsV1().Deployments(namespace).Patch(context.TODO(), deployment.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
+	_, err := clients.KubernetesClient.AppsV1().Deployments(namespace).Patch(context.TODO(), deployment.Name, patchType, bytes, meta_v1.PatchOptions{FieldManager: "Reloader"})
 	return err
 }
 
@@ -506,7 +509,7 @@ func CreateJobFromCronjob(clients kube.Clients, namespace string, resource runti
 	return err
 }
 
-func PatchCronJob(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
+func PatchCronJob(clients kube.Clients, namespace string, resource runtime.Object, patchType patchtypes.PatchType, bytes []byte) error {
 	return errors.New("not supported patching: CronJob")
 }
 
@@ -542,7 +545,7 @@ func ReCreateJobFromjob(clients kube.Clients, namespace string, resource runtime
 	return err
 }
 
-func PatchJob(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
+func PatchJob(clients kube.Clients, namespace string, resource runtime.Object, patchType patchtypes.PatchType, bytes []byte) error {
 	return errors.New("not supported patching: Job")
 }
 
@@ -553,9 +556,9 @@ func UpdateDaemonSet(clients kube.Clients, namespace string, resource runtime.Ob
 	return err
 }
 
-func PatchDaemonSet(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
+func PatchDaemonSet(clients kube.Clients, namespace string, resource runtime.Object, patchType patchtypes.PatchType, bytes []byte) error {
 	daemonSet := resource.(*appsv1.DaemonSet)
-	_, err := clients.KubernetesClient.AppsV1().DaemonSets(namespace).Patch(context.TODO(), daemonSet.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
+	_, err := clients.KubernetesClient.AppsV1().DaemonSets(namespace).Patch(context.TODO(), daemonSet.Name, patchType, bytes, meta_v1.PatchOptions{FieldManager: "Reloader"})
 	return err
 }
 
@@ -566,9 +569,9 @@ func UpdateStatefulSet(clients kube.Clients, namespace string, resource runtime.
 	return err
 }
 
-func PatchStatefulSet(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
+func PatchStatefulSet(clients kube.Clients, namespace string, resource runtime.Object, patchType patchtypes.PatchType, bytes []byte) error {
 	statefulSet := resource.(*appsv1.StatefulSet)
-	_, err := clients.KubernetesClient.AppsV1().StatefulSets(namespace).Patch(context.TODO(), statefulSet.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
+	_, err := clients.KubernetesClient.AppsV1().StatefulSets(namespace).Patch(context.TODO(), statefulSet.Name, patchType, bytes, meta_v1.PatchOptions{FieldManager: "Reloader"})
 	return err
 }
 
@@ -579,9 +582,9 @@ func UpdateDeploymentConfig(clients kube.Clients, namespace string, resource run
 	return err
 }
 
-func PatchDeploymentConfig(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
+func PatchDeploymentConfig(clients kube.Clients, namespace string, resource runtime.Object, patchType patchtypes.PatchType, bytes []byte) error {
 	deploymentConfig := resource.(*openshiftv1.DeploymentConfig)
-	_, err := clients.OpenshiftAppsClient.AppsV1().DeploymentConfigs(namespace).Patch(context.TODO(), deploymentConfig.Name, patchtypes.StrategicMergePatchType, patch, meta_v1.PatchOptions{FieldManager: "Reloader"})
+	_, err := clients.OpenshiftAppsClient.AppsV1().DeploymentConfigs(namespace).Patch(context.TODO(), deploymentConfig.Name, patchType, bytes, meta_v1.PatchOptions{FieldManager: "Reloader"})
 	return err
 }
 
@@ -599,7 +602,7 @@ func UpdateRollout(clients kube.Clients, namespace string, resource runtime.Obje
 	return err
 }
 
-func PatchRollout(clients kube.Clients, namespace string, resource runtime.Object, patch []byte) error {
+func PatchRollout(clients kube.Clients, namespace string, resource runtime.Object, patchType patchtypes.PatchType, bytes []byte) error {
 	return errors.New("not supported patching: Rollout")
 }
 

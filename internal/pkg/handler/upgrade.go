@@ -24,6 +24,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	patchtypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 )
@@ -31,133 +32,126 @@ import (
 // GetDeploymentRollingUpgradeFuncs returns all callback funcs for a deployment
 func GetDeploymentRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
-		ItemFunc:                    callbacks.GetDeploymentItem,
-		ItemsFunc:                   callbacks.GetDeploymentItems,
-		AnnotationsFunc:             callbacks.GetDeploymentAnnotations,
-		PodAnnotationsFunc:          callbacks.GetDeploymentPodAnnotations,
-		ContainersFunc:              callbacks.GetDeploymentContainers,
-		InitContainersFunc:          callbacks.GetDeploymentInitContainers,
-		UpdateFunc:                  callbacks.UpdateDeployment,
-		PatchFunc:                   callbacks.PatchDeployment,
-		PatchTemplateAnnotationFunc: callbacks.GetPatchTemplateAnnotation,
-		PatchTemplateEnvVarFunc:     callbacks.GetPatchTemplateEnvVar,
-		VolumesFunc:                 callbacks.GetDeploymentVolumes,
-		ResourceType:                "Deployment",
-		SupportsPatch:               true,
+		ItemFunc:           callbacks.GetDeploymentItem,
+		ItemsFunc:          callbacks.GetDeploymentItems,
+		AnnotationsFunc:    callbacks.GetDeploymentAnnotations,
+		PodAnnotationsFunc: callbacks.GetDeploymentPodAnnotations,
+		ContainersFunc:     callbacks.GetDeploymentContainers,
+		InitContainersFunc: callbacks.GetDeploymentInitContainers,
+		UpdateFunc:         callbacks.UpdateDeployment,
+		PatchFunc:          callbacks.PatchDeployment,
+		PatchTemplatesFunc: callbacks.GetPatchTemplates,
+		VolumesFunc:        callbacks.GetDeploymentVolumes,
+		ResourceType:       "Deployment",
+		SupportsPatch:      true,
 	}
 }
 
 // GetDeploymentRollingUpgradeFuncs returns all callback funcs for a cronjob
 func GetCronJobCreateJobFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
-		ItemFunc:                    callbacks.GetCronJobItem,
-		ItemsFunc:                   callbacks.GetCronJobItems,
-		AnnotationsFunc:             callbacks.GetCronJobAnnotations,
-		PodAnnotationsFunc:          callbacks.GetCronJobPodAnnotations,
-		ContainersFunc:              callbacks.GetCronJobContainers,
-		InitContainersFunc:          callbacks.GetCronJobInitContainers,
-		UpdateFunc:                  callbacks.CreateJobFromCronjob,
-		PatchFunc:                   callbacks.PatchCronJob,
-		PatchTemplateAnnotationFunc: callbacks.EmptyString,
-		PatchTemplateEnvVarFunc:     callbacks.EmptyString,
-		VolumesFunc:                 callbacks.GetCronJobVolumes,
-		ResourceType:                "CronJob",
-		SupportsPatch:               false,
+		ItemFunc:           callbacks.GetCronJobItem,
+		ItemsFunc:          callbacks.GetCronJobItems,
+		AnnotationsFunc:    callbacks.GetCronJobAnnotations,
+		PodAnnotationsFunc: callbacks.GetCronJobPodAnnotations,
+		ContainersFunc:     callbacks.GetCronJobContainers,
+		InitContainersFunc: callbacks.GetCronJobInitContainers,
+		UpdateFunc:         callbacks.CreateJobFromCronjob,
+		PatchFunc:          callbacks.PatchCronJob,
+		PatchTemplatesFunc: func() callbacks.PatchTemplates { return callbacks.PatchTemplates{} },
+		VolumesFunc:        callbacks.GetCronJobVolumes,
+		ResourceType:       "CronJob",
+		SupportsPatch:      false,
 	}
 }
 
 // GetDeploymentRollingUpgradeFuncs returns all callback funcs for a cronjob
 func GetJobCreateJobFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
-		ItemFunc:                    callbacks.GetJobItem,
-		ItemsFunc:                   callbacks.GetJobItems,
-		AnnotationsFunc:             callbacks.GetJobAnnotations,
-		PodAnnotationsFunc:          callbacks.GetJobPodAnnotations,
-		ContainersFunc:              callbacks.GetJobContainers,
-		InitContainersFunc:          callbacks.GetJobInitContainers,
-		UpdateFunc:                  callbacks.ReCreateJobFromjob,
-		PatchFunc:                   callbacks.PatchJob,
-		PatchTemplateAnnotationFunc: callbacks.EmptyString,
-		PatchTemplateEnvVarFunc:     callbacks.EmptyString,
-		VolumesFunc:                 callbacks.GetJobVolumes,
-		ResourceType:                "Job",
-		SupportsPatch:               false,
+		ItemFunc:           callbacks.GetJobItem,
+		ItemsFunc:          callbacks.GetJobItems,
+		AnnotationsFunc:    callbacks.GetJobAnnotations,
+		PodAnnotationsFunc: callbacks.GetJobPodAnnotations,
+		ContainersFunc:     callbacks.GetJobContainers,
+		InitContainersFunc: callbacks.GetJobInitContainers,
+		UpdateFunc:         callbacks.ReCreateJobFromjob,
+		PatchFunc:          callbacks.PatchJob,
+		PatchTemplatesFunc: func() callbacks.PatchTemplates { return callbacks.PatchTemplates{} },
+		VolumesFunc:        callbacks.GetJobVolumes,
+		ResourceType:       "Job",
+		SupportsPatch:      false,
 	}
 }
 
 // GetDaemonSetRollingUpgradeFuncs returns all callback funcs for a daemonset
 func GetDaemonSetRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
-		ItemFunc:                    callbacks.GetDaemonSetItem,
-		ItemsFunc:                   callbacks.GetDaemonSetItems,
-		AnnotationsFunc:             callbacks.GetDaemonSetAnnotations,
-		PodAnnotationsFunc:          callbacks.GetDaemonSetPodAnnotations,
-		ContainersFunc:              callbacks.GetDaemonSetContainers,
-		InitContainersFunc:          callbacks.GetDaemonSetInitContainers,
-		UpdateFunc:                  callbacks.UpdateDaemonSet,
-		PatchFunc:                   callbacks.PatchDaemonSet,
-		PatchTemplateAnnotationFunc: callbacks.GetPatchTemplateAnnotation,
-		PatchTemplateEnvVarFunc:     callbacks.GetPatchTemplateEnvVar,
-		VolumesFunc:                 callbacks.GetDaemonSetVolumes,
-		ResourceType:                "DaemonSet",
-		SupportsPatch:               true,
+		ItemFunc:           callbacks.GetDaemonSetItem,
+		ItemsFunc:          callbacks.GetDaemonSetItems,
+		AnnotationsFunc:    callbacks.GetDaemonSetAnnotations,
+		PodAnnotationsFunc: callbacks.GetDaemonSetPodAnnotations,
+		ContainersFunc:     callbacks.GetDaemonSetContainers,
+		InitContainersFunc: callbacks.GetDaemonSetInitContainers,
+		UpdateFunc:         callbacks.UpdateDaemonSet,
+		PatchFunc:          callbacks.PatchDaemonSet,
+		PatchTemplatesFunc: callbacks.GetPatchTemplates,
+		VolumesFunc:        callbacks.GetDaemonSetVolumes,
+		ResourceType:       "DaemonSet",
+		SupportsPatch:      true,
 	}
 }
 
 // GetStatefulSetRollingUpgradeFuncs returns all callback funcs for a statefulSet
 func GetStatefulSetRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
-		ItemFunc:                    callbacks.GetStatefulSetItem,
-		ItemsFunc:                   callbacks.GetStatefulSetItems,
-		AnnotationsFunc:             callbacks.GetStatefulSetAnnotations,
-		PodAnnotationsFunc:          callbacks.GetStatefulSetPodAnnotations,
-		ContainersFunc:              callbacks.GetStatefulSetContainers,
-		InitContainersFunc:          callbacks.GetStatefulSetInitContainers,
-		UpdateFunc:                  callbacks.UpdateStatefulSet,
-		PatchFunc:                   callbacks.PatchStatefulSet,
-		PatchTemplateAnnotationFunc: callbacks.GetPatchTemplateAnnotation,
-		PatchTemplateEnvVarFunc:     callbacks.GetPatchTemplateEnvVar,
-		VolumesFunc:                 callbacks.GetStatefulSetVolumes,
-		ResourceType:                "StatefulSet",
-		SupportsPatch:               true,
+		ItemFunc:           callbacks.GetStatefulSetItem,
+		ItemsFunc:          callbacks.GetStatefulSetItems,
+		AnnotationsFunc:    callbacks.GetStatefulSetAnnotations,
+		PodAnnotationsFunc: callbacks.GetStatefulSetPodAnnotations,
+		ContainersFunc:     callbacks.GetStatefulSetContainers,
+		InitContainersFunc: callbacks.GetStatefulSetInitContainers,
+		UpdateFunc:         callbacks.UpdateStatefulSet,
+		PatchFunc:          callbacks.PatchStatefulSet,
+		PatchTemplatesFunc: callbacks.GetPatchTemplates,
+		VolumesFunc:        callbacks.GetStatefulSetVolumes,
+		ResourceType:       "StatefulSet",
+		SupportsPatch:      true,
 	}
 }
 
 // GetDeploymentConfigRollingUpgradeFuncs returns all callback funcs for a deploymentConfig
 func GetDeploymentConfigRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
-		ItemFunc:                    callbacks.GetDeploymentConfigItem,
-		ItemsFunc:                   callbacks.GetDeploymentConfigItems,
-		AnnotationsFunc:             callbacks.GetDeploymentConfigAnnotations,
-		PodAnnotationsFunc:          callbacks.GetDeploymentConfigPodAnnotations,
-		ContainersFunc:              callbacks.GetDeploymentConfigContainers,
-		InitContainersFunc:          callbacks.GetDeploymentConfigInitContainers,
-		UpdateFunc:                  callbacks.UpdateDeploymentConfig,
-		PatchFunc:                   callbacks.PatchDeploymentConfig,
-		PatchTemplateAnnotationFunc: callbacks.GetPatchTemplateAnnotation,
-		PatchTemplateEnvVarFunc:     callbacks.GetPatchTemplateEnvVar,
-		VolumesFunc:                 callbacks.GetDeploymentConfigVolumes,
-		ResourceType:                "DeploymentConfig",
-		SupportsPatch:               true,
+		ItemFunc:           callbacks.GetDeploymentConfigItem,
+		ItemsFunc:          callbacks.GetDeploymentConfigItems,
+		AnnotationsFunc:    callbacks.GetDeploymentConfigAnnotations,
+		PodAnnotationsFunc: callbacks.GetDeploymentConfigPodAnnotations,
+		ContainersFunc:     callbacks.GetDeploymentConfigContainers,
+		InitContainersFunc: callbacks.GetDeploymentConfigInitContainers,
+		UpdateFunc:         callbacks.UpdateDeploymentConfig,
+		PatchFunc:          callbacks.PatchDeploymentConfig,
+		PatchTemplatesFunc: callbacks.GetPatchTemplates,
+		VolumesFunc:        callbacks.GetDeploymentConfigVolumes,
+		ResourceType:       "DeploymentConfig",
+		SupportsPatch:      true,
 	}
 }
 
 // GetArgoRolloutRollingUpgradeFuncs returns all callback funcs for a rollout
 func GetArgoRolloutRollingUpgradeFuncs() callbacks.RollingUpgradeFuncs {
 	return callbacks.RollingUpgradeFuncs{
-		ItemFunc:                    callbacks.GetRolloutItem,
-		ItemsFunc:                   callbacks.GetRolloutItems,
-		AnnotationsFunc:             callbacks.GetRolloutAnnotations,
-		PodAnnotationsFunc:          callbacks.GetRolloutPodAnnotations,
-		ContainersFunc:              callbacks.GetRolloutContainers,
-		InitContainersFunc:          callbacks.GetRolloutInitContainers,
-		UpdateFunc:                  callbacks.UpdateRollout,
-		PatchFunc:                   callbacks.PatchRollout,
-		PatchTemplateAnnotationFunc: callbacks.EmptyString,
-		PatchTemplateEnvVarFunc:     callbacks.EmptyString,
-		VolumesFunc:                 callbacks.GetRolloutVolumes,
-		ResourceType:                "Rollout",
-		SupportsPatch:               false,
+		ItemFunc:           callbacks.GetRolloutItem,
+		ItemsFunc:          callbacks.GetRolloutItems,
+		AnnotationsFunc:    callbacks.GetRolloutAnnotations,
+		PodAnnotationsFunc: callbacks.GetRolloutPodAnnotations,
+		ContainersFunc:     callbacks.GetRolloutContainers,
+		InitContainersFunc: callbacks.GetRolloutInitContainers,
+		UpdateFunc:         callbacks.UpdateRollout,
+		PatchFunc:          callbacks.PatchRollout,
+		PatchTemplatesFunc: func() callbacks.PatchTemplates { return callbacks.PatchTemplates{} },
+		VolumesFunc:        callbacks.GetRolloutVolumes,
+		ResourceType:       "Rollout",
+		SupportsPatch:      false,
 	}
 }
 
@@ -335,7 +329,7 @@ func upgradeResource(clients kube.Clients, config util.Config, upgradeFuncs call
 	if strategyResult.Result == constants.Updated {
 		var err error
 		if upgradeFuncs.SupportsPatch && strategyResult.Patch != nil {
-			err = upgradeFuncs.PatchFunc(clients, config.Namespace, resource, strategyResult.Patch)
+			err = upgradeFuncs.PatchFunc(clients, config.Namespace, resource, strategyResult.Patch.Type, strategyResult.Patch.Bytes)
 		} else {
 			err = upgradeFuncs.UpdateFunc(clients, config.Namespace, resource)
 		}
@@ -499,9 +493,14 @@ func getContainerUsingResource(upgradeFuncs callbacks.RollingUpgradeFuncs, item 
 	return container
 }
 
+type Patch struct {
+	Type  patchtypes.PatchType
+	Bytes []byte
+}
+
 type InvokeStrategyResult struct {
 	Result constants.Result
-	Patch  []byte
+	Patch  *Patch
 }
 
 type invokeStrategy func(upgradeFuncs callbacks.RollingUpgradeFuncs, item runtime.Object, config util.Config, autoReload bool) InvokeStrategyResult
@@ -538,7 +537,7 @@ func updatePodAnnotations(upgradeFuncs callbacks.RollingUpgradeFuncs, item runti
 		pa[k] = v
 	}
 
-	return InvokeStrategyResult{constants.Updated, patch}
+	return InvokeStrategyResult{constants.Updated, &Patch{Type: patchtypes.StrategicMergePatchType, Bytes: patch}}
 }
 
 func getReloaderAnnotationKey() string {
@@ -572,8 +571,8 @@ func createReloadedAnnotations(target *util.ReloadSource, upgradeFuncs callbacks
 	}
 
 	var patch []byte
-	if upgradeFuncs.SupportsPatch && upgradeFuncs.PatchTemplateAnnotationFunc() != "" {
-		patch = fmt.Appendf(nil, upgradeFuncs.PatchTemplateAnnotationFunc(), lastReloadedResourceName, escapedValue)
+	if upgradeFuncs.SupportsPatch {
+		patch = fmt.Appendf(nil, upgradeFuncs.PatchTemplatesFunc().AnnotationTemplate, lastReloadedResourceName, escapedValue)
 	}
 
 	return annotations, patch, nil
@@ -605,11 +604,11 @@ func updateContainerEnvVars(upgradeFuncs callbacks.RollingUpgradeFuncs, item run
 	}
 
 	var patch []byte
-	if upgradeFuncs.SupportsPatch && upgradeFuncs.PatchTemplateEnvVarFunc() != "" {
-		patch = fmt.Appendf(nil, upgradeFuncs.PatchTemplateEnvVarFunc(), container.Name, envVar, config.SHAValue)
+	if upgradeFuncs.SupportsPatch {
+		patch = fmt.Appendf(nil, upgradeFuncs.PatchTemplatesFunc().EnvVarTemplate, container.Name, envVar, config.SHAValue)
 	}
 
-	return InvokeStrategyResult{updateResult, patch}
+	return InvokeStrategyResult{updateResult, &Patch{Type: patchtypes.StrategicMergePatchType, Bytes: patch}}
 }
 
 func updateEnvVar(container *v1.Container, envVar string, shaData string) constants.Result {
